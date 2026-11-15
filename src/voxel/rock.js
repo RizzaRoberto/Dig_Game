@@ -1,7 +1,8 @@
-// Lato "thread principale" della roccia: stato dei voxel, strumenti, chunk e reperto.
+// La roccia (lato "thread principale"): stato dei voxel, strumenti, chunk e reperto.
+// In termini Unity: è un GameObject con figli (i chunk e il reperto) e il suo "script".
 import * as THREE from 'three';
-import { N, CS, NCH, CELL, HALF, ISO, TOOLS, idx } from '../config.js';
-import { makeSpecimen } from '../specimens.js';
+import { N, CS, NCH, CELL, HALF, ISO, TOOLS, GIOCO, idx, rng } from '../config.js';
+import { prepareModel } from '../specimen-model.js';
 import MeshWorker from './mesh-worker.js?worker&inline';
 
 const R = CS + 4;
@@ -18,15 +19,15 @@ export class Rock extends THREE.Group {
     this.ready = false;
     this.bottom = 0.09;
 
+    // materiale della roccia: i colori arrivano dai vertici (vertex colors)
     this.rockMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
     this.chunkGroup = new THREE.Group(); this.add(this.chunkGroup);
-    this.pivot = new THREE.Group(); this.add(this.pivot);
-    this.specMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05 });
-    this.specMesh = new THREE.Mesh(new THREE.BufferGeometry(), this.specMat);
-    this.pivot.add(this.specMesh);
+    // specPivot = centro del reperto (ruota su se stesso quando vinci)
+    this.specPivot = new THREE.Group(); this.add(this.specPivot);
+    this.specMaterials = [];
     this.opacity = 1;
 
-    // ombra morbida sotto la roccia
+    // ombra morbida finta sotto la roccia (economica, funziona anche in AR)
     const cv = document.createElement('canvas'); cv.width = cv.height = 128;
     const cx = cv.getContext('2d'), gr = cx.createRadialGradient(64, 64, 8, 64, 64, 64);
     gr.addColorStop(0, 'rgba(0,0,0,.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
@@ -35,28 +36,57 @@ export class Rock extends THREE.Group {
     this.shadow.rotation.x = -Math.PI / 2; this.add(this.shadow);
   }
 
-  // Nuova roccia: la genera il worker, poi tutti i chunk vengono ricostruiti
-  generate(seed, type) {
-    this.gen++; this.ready = false;
-    this.specimen = makeSpecimen(type, seed);
-    this.specMat.roughness = this.specimen.material.roughness;
-    this.specMat.metalness = this.specimen.material.metalness;
-    return new Promise(res => {
-      this._onReady = res;
-      this.worker.postMessage({ type: 'gen', id: this.gen, seed, specimen: type });
+  // Nuova roccia per un livello. Il worker genera i voxel, poi tutti i chunk vengono ricostruiti.
+  async generate(level, seed) {
+    const gen = ++this.gen; this.ready = false; this.level = level;
+    const params = { terra: level.strati.terra, sabbia: level.strati.sabbia, zona: level.zonaDaLiberare };
+    const msg = { type: 'gen', id: gen, seed, params };
+    const transfer = [];
+    if (level.modello) {
+      const prep = await prepareModel(level, rng(seed ^ 0x51ed));
+      if (gen !== this.gen) return;
+      msg.mesh = { positions: prep.positions, index: prep.index };
+      transfer.push(prep.positions.buffer, prep.index.buffer);
+      this._prep = prep;
+    } else { msg.procedural = level.procedurale; this._prep = null; }
+    return new Promise((res, rej) => {
+      this._onReady = res; this._onError = rej;
+      this.worker.postMessage(msg, transfer);
     });
   }
 
+  _setupSpecimen(d) {
+    this.specPivot.clear(); this.specPivot.rotation.set(0, 0, 0); this.specPivot.visible = true;
+    if (this._prep) {
+      this.specPivot.position.copy(this._prep.pivotPos);
+      this.specPivot.add(this._prep.inner);
+    } else {
+      const g = toGeometry(d.specimenMesh); g.computeBoundingBox();
+      const ctr = g.boundingBox.getCenter(new THREE.Vector3()); g.translate(-ctr.x, -ctr.y, -ctr.z);
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05 }));
+      m.castShadow = m.receiveShadow = true;
+      this.specPivot.position.copy(ctr); this.specPivot.add(m);
+    }
+    // ricorda i colori originali per mostrare i danni
+    this.specMaterials = [];
+    this.specPivot.traverse(o => { if (o.isMesh) for (const m of [].concat(o.material)) this.specMaterials.push({ m, color: m.color.clone(), emissive: m.emissive ? m.emissive.clone() : null }); });
+    this.specMeshes = []; this.specPivot.traverse(o => o.isMesh && this.specMeshes.push(o));
+  }
+
+  // 0..1 integrità -> colore; flash = lampo rosso quando lo colpisci
+  setSpecimenDamage(integrity, flash) {
+    for (const s of this.specMaterials) {
+      s.m.color.copy(s.color).multiply(_tint.setRGB(0.62 + 0.38 * integrity, 0.5 + 0.5 * integrity, 0.45 + 0.55 * integrity));
+      if (s.emissive) s.m.emissive.copy(s.emissive).add(_tint.setRGB(flash * 2.4, flash * 0.3, 0));
+    }
+  }
+
   _onMessage(d) {
+    if (d.type === 'error') { if (d.id === this.gen && this._onError) this._onError(new Error(d.message)); return; }
     if (d.type === 'gen') {
       if (d.id !== this.gen) return;
       this.density = d.density; this.mat = d.mat; this.fd = d.fd; this.shell = d.shell;
-      const sm = d.specimenMesh, g = toGeometry(sm);
-      g.computeBoundingBox();
-      const ctr = g.boundingBox.getCenter(new THREE.Vector3());
-      g.translate(-ctr.x, -ctr.y, -ctr.z);
-      this.specMesh.geometry.dispose(); this.specMesh.geometry = g;
-      this.pivot.position.copy(ctr); this.pivot.rotation.set(0, 0, 0); this.pivot.visible = true;
+      this._setupSpecimen(d);
       for (let z = 0; z < NCH; z++) for (let y = 0; y < NCH; y++) for (let x = 0; x < NCH; x++) this.dirty.add(x + NCH * (y + NCH * z));
       this.inFlight = false; this._firstMesh = true;
       this.flush();
@@ -65,18 +95,19 @@ export class Rock extends THREE.Group {
       if (d.gen !== this.gen) { this.flush(); return; }
       for (const r of d.results) {
         let mesh = this.chunks.get(r.key);
-        if (!r.idx.length) { if (mesh) { mesh.visible = false; } continue; }
+        if (!r.idx.length) { if (mesh) mesh.visible = false; continue; }
         const g = toGeometry(r);
-        if (!mesh) { mesh = new THREE.Mesh(g, this.rockMat); mesh.renderOrder = 2; mesh.userData.rock = true; this.chunkGroup.add(mesh); this.chunks.set(r.key, mesh); }
-        else { mesh.geometry.dispose(); mesh.geometry = g; }
+        if (!mesh) {
+          mesh = new THREE.Mesh(g, this.rockMat); mesh.renderOrder = 2; mesh.castShadow = mesh.receiveShadow = true;
+          this.chunkGroup.add(mesh); this.chunks.set(r.key, mesh);
+        } else { mesh.geometry.dispose(); mesh.geometry = g; }
         mesh.visible = true;
       }
       if (this._firstMesh) {
         this._firstMesh = false;
         let minY = 0;
         for (const m of this.chunks.values()) if (m.visible) { m.geometry.computeBoundingBox(); minY = Math.min(minY, m.geometry.boundingBox.min.y); }
-        this.bottom = -minY;
-        this.shadow.position.y = minY + 0.001;
+        this.bottom = -minY; this.shadow.position.y = minY + 0.001;
         this.ready = true;
         this._onReady && this._onReady();
       }
@@ -115,6 +146,17 @@ export class Rock extends THREE.Group {
       this.dirty.add(x + NCH * (y + NCH * z));
   }
 
+  // Distanza dal reperto in voxel (negativa = dentro), interpolata dalla griglia
+  distAt(x, y, z) {
+    if (!this.fd) return 99;
+    x = Math.min(Math.max(x, 0), N - 1.001); y = Math.min(Math.max(y, 0), N - 1.001); z = Math.min(Math.max(z, 0), N - 1.001);
+    const x0 = x | 0, y0 = y | 0, z0 = z | 0, fx = x - x0, fy = y - y0, fz = z - z0, f = this.fd, sxy = N * N;
+    const i = idx(x0, y0, z0);
+    const c00 = f[i] * (1 - fx) + f[i + 1] * fx, c10 = f[i + N] * (1 - fx) + f[i + N + 1] * fx;
+    const c01 = f[i + sxy] * (1 - fx) + f[i + sxy + 1] * fx, c11 = f[i + sxy + N] * (1 - fx) + f[i + sxy + N + 1] * fx;
+    return (c00 * (1 - fy) + c10 * fy) * (1 - fz) + (c01 * (1 - fy) + c11 * fy) * fz;
+  }
+
   // Applica lo strumento attorno al punto (coordinate voxel)
   applyTool(gx, gy, gz, toolIndex, dt) {
     const T = TOOLS[toolIndex], r = T.r, r2 = r * r;
@@ -134,9 +176,9 @@ export class Rock extends THREE.Group {
     }
     if (removed > 0) this.markDirty(x0, y0, z0, x1, y1, z1);
     let dom = 0; for (let m = 1; m <= 3; m++) if (mc[m] > mc[dom]) dom = m;
-    const f = this.specimen.dist(gx, gy, gz);
+    const f = this.distAt(gx, gy, gz), th = r * GIOCO.sogliaDanno;
     let dmg = 0;
-    if (T.dmg > 0 && f < r * 0.85) dmg = T.dmg * Math.min(1.5, 1 - f / (r * 0.85)) * dt;
+    if (T.dmg > 0 && f < th) dmg = T.dmg * this.level.resistenza * Math.min(1.5, 1 - f / th) * dt;
     return { removed, dom, dmg, f };
   }
 
@@ -161,11 +203,14 @@ export class Rock extends THREE.Group {
     if (this.rockMat.transparent !== tr) { this.rockMat.transparent = tr; this.rockMat.depthWrite = !tr; this.rockMat.needsUpdate = true; }
     this.rockMat.opacity = o;
     this.chunkGroup.visible = o > 0.01;
+    for (const m of this.chunks.values()) m.castShadow = !tr;
   }
 
-  get meshes() { return [...this.chunkGroup.children.filter(m => m.visible), this.specMesh]; }
+  // oggetti colpibili dal mouse
+  get meshes() { return [...this.chunkGroup.children.filter(m => m.visible), ...(this.specMeshes || [])]; }
 }
 
+const _tint = new THREE.Color();
 function toGeometry(m) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(m.pos, 3));

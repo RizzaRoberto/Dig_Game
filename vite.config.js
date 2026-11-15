@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => ({
   build: {
     outDir: mode === 'single' ? 'dist-single' : 'dist',
     target: 'es2020',
+    // nel file singolo i modelli .glb vengono incorporati nella pagina
+    assetsInlineLimit: mode === 'single' ? 100_000_000 : 4096,
   },
   server: { host: mode === 'quest' },
 }));

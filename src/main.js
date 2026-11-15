@@ -1,47 +1,35 @@
+// =====================================================================
+//  PUNTO DI INGRESSO DEL GIOCO
+//  Crea la scena, collega input e interfaccia, e contiene il loop di gioco
+//  (l'equivalente di Update() in Unity: vedi renderer.setAnimationLoop in fondo).
+// =====================================================================
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { TOOLS, MAT_HEX, MAT_NAME, ROCK, CELL, WIN_EXPOSURE, SCAN_TIME, SCAN_COOLDOWN } from './config.js';
-import { pickSpecimenType } from './specimens.js';
+import { TOOLS, GIOCO, MAT_HEX, MAT_NAME, ROCK, CELL } from './config.js';
+import { LEVELS } from './levels.js';
+import { createScene, applyLights, followTarget } from './scene.js';
 import { Rock } from './voxel/rock.js';
 import { Debris } from './fx/debris.js';
 import { initAudio, toolSound, blip } from './fx/audio.js';
 import { ToolRig, Cursor } from './tools.js';
 import { XRInput } from './xr/xr.js';
 import { XRHud } from './ui/hud-xr.js';
-import { DomHud, fmtTime } from './ui/hud-dom.js';
-import { addFind } from './collection.js';
+import { UI, fmtTime } from './ui/screens.js';
+import { createDebug } from './ui/debug.js';
+import { saveResult, isUnlocked } from './progress.js';
 
 // ================= STATO DI GIOCO =================
 const G = {
-  tool: 0, integrity: 100, exposure: 0, state: 'loading', loading: true, placing: false,
-  started: false, t0: 0, tEnd: 0, scanT: 0, scanCD: 0, flash: 0, layer: '–',
-  rightActive: false, specimenName: '', stars: 0, banner: '',
+  levelIndex: 0, tool: 0, integrity: 100, exposure: 0, winAt: 0.88,
+  state: 'menu',          // menu | loading | play | won | lost
+  loading: false, placing: false, started: false, t0: 0, tEnd: 0,
+  scanT: 0, scanCD: 0, flash: 0, layer: '–', rightActive: false,
+  specimenName: '', stars: 0, banner: '',
 };
 const MAT_COL = Object.fromEntries(Object.entries(MAT_HEX).map(([k, v]) => [k, new THREE.Color(v)]));
 
 // ================= SCENA =================
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.xr.enabled = true;
-document.body.prepend(renderer.domElement);
-
-const scene = new THREE.Scene();
-const BG = new THREE.Color(0x1d1813);
-scene.background = BG;
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.01, 20);
-const CAM0 = new THREE.Vector3(0.2, 0.14, 0.42);
-camera.position.copy(CAM0);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-controls.touches = { ONE: null, TWO: THREE.TOUCH.DOLLY_ROTATE };
-controls.enableDamping = true; controls.enablePan = false;
-controls.minDistance = 0.22; controls.maxDistance = 1.2;
-
-scene.add(new THREE.HemisphereLight(0xfff1dc, 0x3b3026, 1.7));
-const sun = new THREE.DirectionalLight(0xffffff, 2.4); sun.position.set(0.6, 1.2, 0.7); scene.add(sun);
-const fill = new THREE.DirectionalLight(0xffc89a, 0.6); fill.position.set(-0.8, 0.2, -0.5); scene.add(fill);
-
+const { renderer, scene, camera, controls, lights } = createScene();
+const CAM0 = camera.position.clone();
 const rock = new Rock(); scene.add(rock);
 const debris = new Debris(); scene.add(debris);
 const cursor = new Cursor(); scene.add(cursor);
@@ -51,44 +39,75 @@ const reticle = new THREE.Mesh(new THREE.RingGeometry(0.11, 0.125, 48).rotateX(-
 reticle.visible = false; reticle.matrixAutoUpdate = false; scene.add(reticle);
 
 // ================= INTERFACCIA =================
-const hud = new DomHud({ tool: setTool, scan: scanner, newDig, enterAR });
-function setTool(i) { G.tool = i; toolRig.setTool(i); hud.setTool(i); }
+const ui = new UI({
+  play: (i, ar) => { if (ar) enterAR(); startLevel(i); },
+  tool: setTool, scan: scanner, enterAR,
+  retry: () => startLevel(G.levelIndex),
+  next: () => startLevel(G.levelIndex + 1),
+  menu: () => { if (renderer.xr.isPresenting) renderer.xr.getSession().end(); showMenu('levels'); },
+  arSupported: () => XRInput.supported(),
+});
+const debug = createDebug({
+  onLights: () => applyLights(renderer, scene, lights),
+  getLevel: () => rock.level,
+  regenerate: () => startLevel(G.levelIndex, rock.level),
+});
+function setTool(i) { G.tool = i; toolRig.setTool(i); ui.setTool(i); }
 
-// ================= PARTITA =================
-async function newDig() {
-  G.state = 'loading'; G.loading = true; G.rightActive = false;
-  hud.hideResult();
-  const type = pickSpecimenType(Math.random);
-  await rock.generate((Math.random() * 2 ** 31) | 0, type);
-  Object.assign(G, { integrity: 100, state: 'play', loading: false, started: false, t0: 0, tEnd: 0, scanT: 0, scanCD: 0, flash: 0, specimenName: rock.specimen.name, stars: 0, banner: '' });
+// ================= FLUSSO DI GIOCO =================
+async function startLevel(i, levelOverride) {
+  const level = levelOverride || LEVELS[i];
+  if (!level) return;
+  G.levelIndex = i; G.state = 'loading'; G.loading = true; G.rightActive = false;
+  ui.show('game'); ui.setLevel(level); ui.hideResult();
+  controls.autoRotate = false;
+  try {
+    await rock.generate(level, (Math.random() * 2 ** 31) | 0);
+  } catch (e) {
+    G.loading = false; ui.loading(false);
+    ui.note('Errore nel caricare il livello: ' + e.message);
+    console.error(e); return;
+  }
+  Object.assign(G, { integrity: 100, state: 'play', loading: false, started: false, t0: 0, tEnd: 0, scanT: 0, scanCD: 0, flash: 0,
+    specimenName: level.nome, stars: 0, banner: '', winAt: level.vittoria });
   G.exposure = rock.exposure();
-  rock.setOpacity(1); rock.specMat.color.setRGB(1, 1, 1);
+  rock.setOpacity(1);
   if (renderer.xr.isPresenting && !G.placing && !xr.anchor) xr.setAnchor(rock.matrixWorld);
+}
+
+// Menu: la roccia del primo livello gira sullo sfondo
+async function showMenu(screen = 'start') {
+  G.state = 'menu'; ui.show(screen);
+  camera.position.copy(CAM0).multiplyScalar(1.15); controls.target.set(0, 0, 0);
+  controls.autoRotate = true; controls.autoRotateSpeed = 0.8;
+  if (!rock.density) { try { await rock.generate(LEVELS[0], 7); } catch (e) { ui.note(e.message); } }
+  rock.setOpacity(1); rock.specPivot.visible = true;
 }
 
 function finish(won) {
   G.state = won ? 'won' : 'lost'; G.tEnd = performance.now(); G.rightActive = false; toolSound(G.tool, false);
   const secs = G.started ? (G.tEnd - G.t0) / 1000 : 0;
+  const level = rock.level;
   if (won) {
-    G.stars = G.integrity >= 90 ? 3 : G.integrity >= 60 ? 2 : 1;
-    const r = addFind(rock.specimen.type, G.stars, G.integrity, secs);
-    G.banner = r.isNew ? 'Nuovo reperto nel museo!' : r.isRecord ? 'Nuovo record!' : '';
-    hud.showResult(true, G.specimenName, G.stars, `Integrità ${Math.round(G.integrity)}% · Tempo ${fmtTime(secs)}`, G.banner);
+    const [s3, s2] = GIOCO.stelle;
+    G.stars = G.integrity >= s3 ? 3 : G.integrity >= s2 ? 2 : 1;
+    const r = saveResult(level.id, G.stars, G.integrity, secs);
+    const hasNext = G.levelIndex + 1 < LEVELS.length;
+    G.banner = r.isFirst ? (hasNext ? 'Nuovo livello sbloccato!' : 'Livello completato!') : r.isRecord ? 'Nuovo record!' : '';
+    ui.showResult({ won, name: level.nome, stars: G.stars, text: `Integrità ${Math.round(G.integrity)}% · Tempo ${fmtTime(secs)}`, badge: G.banner, hasNext: hasNext && isUnlocked(LEVELS, G.levelIndex + 1) });
     blip('win');
   } else {
     G.banner = '';
-    hud.showResult(false, '', 0, 'Troppo vicino col trapano! Vicino al reperto usa scalpello e pennello.');
-    const col = rock.specMesh.geometry.getAttribute('color');
-    const c = col ? new THREE.Color(col.getX(0), col.getY(0), col.getZ(0)) : new THREE.Color(0xe2cfa2);
-    debris.spawn(rock.pivot.getWorldPosition(new THREE.Vector3()), c, 140, 0.6);
-    rock.pivot.visible = false;
+    ui.showResult({ won, text: 'Troppo vicino col trapano! Vicino al reperto usa scalpello e pennello.' });
+    debris.spawn(rock.specPivot.getWorldPosition(new THREE.Vector3()), new THREE.Color(level.coloreDetriti), 140, 0.6);
+    rock.specPivot.visible = false;
     blip('lose');
   }
 }
 
 function scanner() {
   if (G.state !== 'play' || G.scanCD > 0) return;
-  G.scanT = SCAN_TIME; G.scanCD = SCAN_COOLDOWN; blip('scan');
+  G.scanT = GIOCO.scanner.durata; G.scanCD = GIOCO.scanner.ricarica; blip('scan');
 }
 
 // ================= INPUT PC / TOUCH =================
@@ -106,11 +125,11 @@ cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
 cv.addEventListener('pointerleave', e => { pointerIn = false; if (e.pointerType === 'mouse') pointerDown = false; });
 function setPointer(e) { pointer.set(e.clientX / innerWidth * 2 - 1, -e.clientY / innerHeight * 2 + 1); pointerIn = true; }
 addEventListener('keydown', e => {
+  if (ui.screen !== 'game') return;
   if (e.key === 'Shift') controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
   if (e.key >= '1' && e.key <= String(TOOLS.length)) setTool(+e.key - 1);
   if (e.key === 's' || e.key === 'S') scanner();
-  if (e.key === 'r' || e.key === 'R') newDig();
-  if (e.key === 'Escape') hud.showMuseum(false);
+  if (e.key === 'r' || e.key === 'R') startLevel(G.levelIndex);
 });
 addEventListener('keyup', e => { if (e.key === 'Shift') controls.mouseButtons.LEFT = null; });
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
@@ -125,7 +144,7 @@ xr.on.trigger = (h, down) => {
     if (G.placing) { if (down) placeRock(); return; }
     G.rightActive = down && G.state === 'play';
   } else if (down) {
-    if (G.state === 'won' || G.state === 'lost') newDig();
+    if (G.state === 'won' || G.state === 'lost') startLevel(G.levelIndex);
     else if (G.placing) placeRock();
     else { setTool((G.tool + 1) % TOOLS.length); blip('tool'); }
   }
@@ -137,22 +156,23 @@ xr.on.squeeze = (h, down) => {
   else if (grab) { grab = null; xr.setAnchor(rock.matrixWorld); }
 };
 xr.on.button = (h, i) => {
-  if (h === 'left' && i === 4) { G.placing = true; xr.clearAnchor(); grab = null; }        // X: riposiziona
-  if (h === 'left' && i === 5) newDig();                                                     // Y: nuovo scavo
-  if (h === 'right' && i === 4) scanner();                                                   // A: scanner
-  if (h === 'right' && i === 5) { setTool((G.tool + 1) % TOOLS.length); blip('tool'); }     // B: strumento
+  if (h === 'left' && i === 4) { G.placing = true; xr.clearAnchor(); grab = null; }                 // X: riposiziona
+  if (h === 'left' && i === 5) renderer.xr.getSession()?.end();                                        // Y: esci dall'AR
+  if (h === 'right' && i === 4) scanner();                                                            // A: scanner
+  if (h === 'right' && i === 5) { setTool((G.tool + 1) % TOOLS.length); blip('tool'); }              // B: strumento
 };
 function placeRock() { G.placing = false; reticle.visible = false; rock.updateMatrixWorld(); xr.setAnchor(rock.matrixWorld); blip('place'); }
 
 async function enterAR() {
   initAudio();
-  if (!(await XRInput.supported())) { hud.note('Realtà mista non disponibile qui. Apri la pagina dal browser del Meta Quest (indirizzo https).'); return; }
-  try { await xr.enter(); hud.note(''); }
-  catch (e) { hud.note('Non riesco ad avviare l\'AR (' + e.message + '). Se la pagina è dentro un\'anteprima, aprila dal suo indirizzo https.'); }
+  if (!(await XRInput.supported())) { ui.note('Realtà mista non disponibile qui. Apri la pagina dal browser del Meta Quest (indirizzo https).'); return; }
+  try { await xr.enter(); ui.note(''); }
+  catch (e) { ui.note('Non riesco ad avviare l\'AR (' + e.message + ').'); }
 }
 renderer.xr.addEventListener('sessionstart', () => { scene.background = null; G.placing = true; });
 renderer.xr.addEventListener('sessionend', () => {
-  scene.background = BG; G.placing = false; grab = null; G.rightActive = false; reticle.visible = false;
+  scene.background = new THREE.Color(); applyLights(renderer, scene, lights);
+  G.placing = false; grab = null; G.rightActive = false; reticle.visible = false;
   rock.position.set(0, 0, 0); rock.quaternion.identity();
   camera.position.copy(CAM0); controls.target.set(0, 0, 0);
 });
@@ -171,19 +191,19 @@ function updatePlacement() {
     c.getWorldPosition(tmpV); tmpV2.set(0, 0, -1).applyQuaternion(c.getWorldQuaternion(tmpQ));
     rock.position.copy(tmpV).addScaledVector(tmpV2, 0.45);
   } else return;
-  // la roccia guarda verso di te (solo rotazione orizzontale)
   camera.getWorldPosition(tmpV2).sub(rock.position); tmpV2.y = 0;
   if (tmpV2.lengthSq() > 1e-4) rock.quaternion.setFromAxisAngle(UP, Math.atan2(tmpV2.x, tmpV2.z));
 }
 
-// ================= LOOP =================
-const clock = new THREE.Clock();
+// ================= LOOP DI GIOCO (come Update() in Unity) =================
+const timer = new THREE.Timer();
 let lastPulse = 0;
 setTool(0);
-newDig();
+showMenu('start');
 
 renderer.setAnimationLoop((time, frame) => {
-  const dt = Math.min(clock.getDelta(), 0.05), now = performance.now();
+  timer.update(time);
+  const dt = Math.min(timer.getDelta(), 0.05), now = performance.now();
   const inXR = renderer.xr.isPresenting;
   if (inXR) {
     xr.update(frame);
@@ -192,6 +212,7 @@ renderer.setAnimationLoop((time, frame) => {
     else if (xr.anchorPose) xr.anchorPose.decompose(rock.position, rock.quaternion, tmpS);
   }
   rock.updateMatrixWorld();
+  followTarget(lights, rock.position);
 
   // ---- posizione della punta dello strumento ----
   const T = TOOLS[G.tool], playing = G.state === 'play' && !G.placing;
@@ -218,8 +239,8 @@ renderer.setAnimationLoop((time, frame) => {
   let res = null, near = false;
   if (tipLocal) {
     const g = rock.localToGrid(tipLocal);
-    const fd = rock.specimen.dist(g.x, g.y, g.z);
-    near = T.dmg > 0 && fd < T.r * 1.9;
+    const fd = rock.distAt(g.x, g.y, g.z);
+    near = T.dmg > 0 && fd < T.r * GIOCO.sogliaAvviso;
     G.layer = fd < 0.8 ? 'Reperto!' : (MAT_NAME[rock.materialAt(g.x, g.y, g.z)] || '–');
     if (using) {
       if (!G.started) { G.started = true; G.t0 = now; }
@@ -244,13 +265,11 @@ renderer.setAnimationLoop((time, frame) => {
   rock.flush();
   if (res && res.removed > 0) G.exposure = rock.exposure();
 
-  // ---- aspetto del reperto ----
+  // ---- aspetto del reperto (danni) ----
   G.flash = Math.max(0, G.flash - dt);
-  const k = G.integrity / 100;
-  rock.specMat.color.setRGB(0.62 + 0.38 * k, 0.5 + 0.5 * k, 0.45 + 0.55 * k);
-  rock.specMat.emissive.setRGB(G.flash * 2.4, G.flash * 0.3, 0);
+  rock.setSpecimenDamage(G.integrity / 100, G.flash);
 
-  // ---- scanner e trasparenza ----
+  // ---- scanner e trasparenza della roccia ----
   if (G.scanT > 0) G.scanT = Math.max(0, G.scanT - dt);
   if (G.scanCD > 0) G.scanCD = Math.max(0, G.scanCD - dt);
   let target = G.scanT > 0 ? 0.22 : G.placing ? 0.8 : 1;
@@ -261,20 +280,20 @@ renderer.setAnimationLoop((time, frame) => {
   // ---- fine partita ----
   if (G.state === 'play') {
     if (G.integrity <= 0) finish(false);
-    else if (G.exposure >= WIN_EXPOSURE) finish(true);
+    else if (G.exposure >= G.winAt) finish(true);
   }
-  if (G.state === 'won') rock.pivot.rotation.y += dt * 0.6;
+  if (G.state === 'won') rock.specPivot.rotation.y += dt * 0.6;
 
   debris.update(dt);
 
-  // ---- HUD ----
+  // ---- interfaccia ----
   const secs = G.started ? ((G.state === 'play' ? now : G.tEnd) - G.t0) / 1000 : 0;
-  hud.update(G, secs);
+  ui.update(G, secs);
   if (inXR) xrHud.draw(G, now);
 
-  if (!inXR) controls.update();
+  if (!inXR) controls.update(dt);
   renderer.render(scene, camera);
 });
 
-// accesso per debug dalla console
-window.__scavo = { G, rock, newDig };
+// accesso per debug dalla console del browser
+window.__scavo = { G, rock, startLevel, scene, debug, camera, controls, renderer };

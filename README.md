@@ -27,7 +27,9 @@ Il certificato è auto-firmato: il browser chiederà conferma, scegli *Avanzate 
 | Scanner | S | impugnatura destra (o A) |
 | Ruotare / spostare la roccia | tasto destro o Shift+trascina | impugnatura sinistra |
 | Riposizionare sul tavolo | — | X |
-| Nuovo scavo | R | Y, o grilletto sinistro a fine partita |
+| Ricominciare il livello | R | grilletto sinistro a fine partita |
+| Uscire dall'AR | — | Y |
+| Pannello di debug | D | — |
 
 All'ingresso in AR la roccia segue il controller destro: puntalo su un tavolo e premi il grilletto per appoggiarla.
 La posizione viene fissata con un'ancora WebXR, così resta ferma anche se ti muovi.
@@ -45,32 +47,17 @@ La posizione viene fissata con un'ancora WebXR, così resta ferma anche se ti mu
 3. Su GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 4. A ogni `git push` il gioco viene ricompilato e pubblicato su `https://<tuo-utente>.github.io/scavo-in-3d/`.
 
-## Struttura
+## Personalizzare
 
-```
-src/
-  config.js            parametri: griglia, strati, strumenti (valori da bilanciare)
-  specimens.js         reperti procedurali: ammonite, trilobite, geode di ametista
-  main.js              scena, loop di gioco, input PC
-  voxel/
-    rock.js            stato dei voxel, applicazione degli strumenti, gestione dei chunk
-    mesh-worker.js     Web Worker: genera la roccia e ricostruisce le mesh
-    mesher.js          Surface Nets (voxel → mesh liscia), per regione/chunk
-    generate.js        generazione della roccia a strati
-  xr/xr.js             sessione AR, controller, hit-test, ancore, vibrazione
-  ui/hud-dom.js        interfaccia HTML (PC/telefono) e museo
-  ui/hud-xr.js         pannello sul controller sinistro
-  fx/                  detriti e suoni
-  collection.js        museo dei reperti trovati (salvato nel browser)
-```
+Leggi **[GUIDA.md](GUIDA.md)**: spiega il progetto partendo dai concetti di Unity, come funzionano le luci,
+come aggiungere un livello con un tuo modello .glb e dove si cambia ogni parametro.
 
-### Come funziona lo scavo
-- La roccia è una griglia di 56³ voxel con densità 0–1, divisa in chunk di 16³ celle.
-- Gli strumenti abbassano la densità in una sfera attorno alla punta: ogni materiale ha la sua durezza
-  e il pennello non intacca la roccia.
-- Solo i chunk modificati vengono ricostruiti, nel Web Worker, così il gioco resta fluido.
-- Il reperto è una funzione di distanza (SDF): serve sia per disegnarlo sia per calcolare il danno
-  quando uno strumento gli si avvicina troppo.
+In breve:
+- **livelli e modelli** → `src/levels.js` + file .glb in `src/modelli/`
+- **strumenti e regole** → `src/config.js`
+- **luci** → `src/scene.js`
+- **interfaccia** → `index.html`, `src/style.css`, `src/ui/screens.js`
+- **pannello di debug** → tasto **D** durante il gioco
 
 ## Altri comandi
 - `npm run build`: build per il web in `dist/`

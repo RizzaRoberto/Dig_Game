@@ -130,7 +130,7 @@ function buildCrystal(r) {
   };
 }
 
-const BUILDERS = { ammonite: buildAmmonite, trilobite: buildTrilobite, crystal: buildCrystal };
+export const BUILDERS = { ammonite: buildAmmonite, trilobite: buildTrilobite, crystal: buildCrystal };
 
 // Crea il reperto posizionato e ruotato nella griglia (coordinate voxel globali)
 export function makeSpecimen(type, seed) {

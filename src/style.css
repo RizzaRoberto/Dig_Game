@@ -1,9 +1,51 @@
-:root { --bg:#17130f; --panel:rgba(28,22,17,.84); --line:rgba(255,236,200,.14); --txt:#f3e7d3; --dim:#b9a88e; --acc:#e8a94a; --bad:#e0573f; --good:#7cc576; }
+/* ============ Colori e stile generale: cambia qui per modificare l'aspetto ============ */
+:root {
+  --bg:#17130f; --panel:rgba(28,22,17,.84); --line:rgba(255,236,200,.14);
+  --txt:#f3e7d3; --dim:#b9a88e; --acc:#e8a94a; --bad:#e0573f; --good:#7cc576;
+  --font: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
 * { box-sizing:border-box; }
-html,body { margin:0; height:100%; background:var(--bg); color:var(--txt); font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; overflow:hidden; user-select:none; -webkit-user-select:none; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--txt); font:14px/1.35 var(--font); overflow:hidden; user-select:none; -webkit-user-select:none; }
 canvas { display:block; touch-action:none; }
 button { font:inherit; color:var(--txt); background:rgba(255,255,255,.06); border:1px solid var(--line); border-radius:9px; padding:8px 12px; cursor:pointer; }
+button:hover { background:rgba(255,255,255,.12); }
+button.accent { background:var(--acc); color:#22180c; font-weight:600; border-color:var(--acc); }
+button.ghost { background:none; border-color:transparent; color:var(--dim); }
+button:disabled { opacity:.45; cursor:default; }
 .panel { position:fixed; background:var(--panel); border:1px solid var(--line); border-radius:12px; backdrop-filter:blur(6px); }
+
+/* ============ Schermate: se ne vede una alla volta (attributo data-screen sul body) ============ */
+.screen { display:none; }
+body[data-screen="start"]  #screen-start,
+body[data-screen="levels"] #screen-levels,
+body[data-screen="game"]   #screen-game { display:block; }
+
+/* Schermata iniziale: la roccia 3D gira sullo sfondo */
+#screen-start { position:fixed; inset:0; background:radial-gradient(ellipse at 50% 60%, transparent 0 35%, rgba(23,19,15,.85) 75%); }
+.title-block { position:absolute; left:50%; bottom:12vh; transform:translateX(-50%); text-align:center; width:min(560px,90vw); }
+.kicker { margin:0; color:var(--acc); letter-spacing:.18em; text-transform:uppercase; font-size:12px; }
+.title-block h1 { margin:.15em 0 .2em; font-size:clamp(40px,8vw,76px); letter-spacing:.01em; font-weight:800; }
+.sub { margin:0 0 28px; color:var(--dim); font-size:16px; }
+button.big { font-size:20px; padding:14px 56px; border-radius:40px; background:var(--acc); color:#22180c; font-weight:700; border:none; box-shadow:0 8px 30px rgba(232,169,74,.25); }
+button.big:hover { filter:brightness(1.08); }
+
+/* Scelta del livello */
+#screen-levels { position:fixed; inset:0; background:rgba(23,19,15,.88); backdrop-filter:blur(4px); overflow:auto; }
+.levels-wrap { width:min(760px,92vw); margin:6vh auto; }
+.levels-wrap header { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
+.levels-wrap h2 { margin:0; font-size:26px; }
+#levelList { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
+.lvl { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:8px; }
+.lvl .num { color:var(--acc); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+.lvl h3 { margin:0; font-size:20px; }
+.lvl p { margin:0; color:var(--dim); font-size:13px; flex:1; }
+.lvl .stars { color:var(--acc); letter-spacing:3px; font-size:18px; }
+.lvl .best { color:var(--dim); font-size:12px; }
+.lvl .btns { display:flex; gap:8px; margin-top:4px; }
+.lvl .btns button { flex:1; }
+.lvl.locked { opacity:.45; }
+
+/* ============ Interfaccia di gioco ============ */
 #hud { top:12px; left:12px; padding:12px 14px; width:250px; }
 #hud h1 { margin:0 0 8px; font-size:15px; letter-spacing:.04em; text-transform:uppercase; color:var(--acc); }
 .row { display:flex; justify-content:space-between; font-size:12px; color:var(--dim); margin-top:8px; }
@@ -16,25 +58,14 @@ button { font:inherit; color:var(--txt); background:rgba(255,255,255,.06); borde
 #toolbar button small { display:block; font-size:10px; color:var(--dim); }
 #toolbar button.on { background:var(--acc); color:#22180c; border-color:var(--acc); }
 #toolbar button.on small { color:#4a3418; }
-#toolbar button:disabled { opacity:.45; cursor:default; }
 #topRight { position:fixed; top:12px; right:12px; display:flex; gap:8px; }
-#arBtn { background:var(--acc); color:#22180c; font-weight:600; border:none; }
 #help { bottom:76px; left:50%; transform:translateX(-50%); padding:6px 12px; font-size:12px; color:var(--dim); white-space:nowrap; }
-#loading { top:50%; left:50%; transform:translate(-50%,-50%); padding:10px 16px; color:var(--dim); display:none; }
-#museum { top:50%; left:50%; transform:translate(-50%,-50%);
-}
-#msg { top:12px; left:50%; transform:translateX(-50%); padding:14px 22px !important; }
-#msg, #museum { padding:22px 26px; text-align:center; display:none; min-width:300px; }
-#msg h2, #museum h2 { margin:0 0 6px; font-size:22px; }
+#loading { top:50%; left:50%; transform:translate(-50%,-50%); padding:10px 16px; color:var(--dim); display:none; z-index:5; }
+#msg { top:12px; left:50%; transform:translateX(-50%); padding:14px 22px; text-align:center; display:none; min-width:320px; }
+#msg h2 { margin:0 0 6px; font-size:22px; }
 #msg p { margin:6px 0 14px; color:var(--dim); }
 #msg .stars { font-size:28px; color:var(--acc); letter-spacing:4px; }
+#msg .btns { display:flex; gap:8px; justify-content:center; }
 .badge { display:inline-block; background:var(--good); color:#10200e; font-weight:700; font-size:12px; padding:3px 9px; border-radius:20px; margin-top:4px; }
-#museum { width:min(440px, 92vw); }
-#museumList { display:grid; gap:8px; margin:12px 0 16px; text-align:left; }
-.card { border:1px solid var(--line); border-radius:10px; padding:10px 12px; display:grid; grid-template-columns:1fr auto; gap:2px 8px; opacity:.55; }
-.card.found { opacity:1; }
-.card .rar { color:var(--dim); font-size:12px; text-align:right; }
-.card .stars { color:var(--acc); letter-spacing:2px; grid-column:1 / -1; }
-.card small { grid-column:1 / -1; color:var(--dim); }
-#note { top:58px; right:12px; padding:10px 12px; max-width:320px; font-size:12px; color:var(--dim); display:none; }
+#note { top:58px; right:12px; padding:10px 12px; max-width:320px; font-size:12px; color:var(--dim); display:none; z-index:6; }
 @media (max-width:640px){ #hud{width:200px} #help{display:none} #toolbar button{min-width:70px;padding:7px 8px} }

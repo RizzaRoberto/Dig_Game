@@ -1,36 +1,40 @@
-// Generazione della roccia a strati e della mesh del reperto (gira nel worker)
-import { N, C, R0, ISO, CELL, HALF, DIRT, ROCK, SED, SED_BAND, SHELL_BAND, MAT_HEX, idx, clamp01, h3, hexLinear, rng } from '../config.js';
-import { makeSpecimen } from '../specimens.js';
+// Generazione della roccia a strati attorno al reperto (gira nel worker)
+import { N, C, ROCCIA, ISO, CELL, HALF, DIRT, ROCK, SED, MAT_HEX, idx, clamp01, h3, hexLinear, rng } from '../config.js';
 import { surfaceNets } from './mesher.js';
 
-export function generateRock(seed, type) {
-  const spec = makeSpecimen(type, seed);
+/**
+ * @param seed   seme casuale (forma della roccia)
+ * @param spec   reperto: { dist(gx,gy,gz) } distanza con segno in voxel
+ * @param params { terra, sabbia, zona }  spessori in voxel
+ */
+export function generateRock(seed, spec, params) {
   const r = rng(seed);
   const ph = Array.from({ length: 8 }, () => r() * 6.283);
   const density = new Float32Array(N * N * N), mat = new Uint8Array(N * N * N), fd = new Float32Array(N * N * N);
   const shell = [];
+  const R0 = ROCCIA.raggio;
   for (let z = 0; z < N; z++) for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const i = idx(x, y, z);
     const dx = x - C, dy = (y - C) * 1.12, dz = z - C;
     const rr = Math.hypot(dx, dy, dz) || 1e-6, ux = dx / rr, uy = dy / rr, uz = dz / rr;
     const nz = 0.6 * Math.sin(3 * ux + ph[0]) * Math.sin(3 * uy + ph[1]) * Math.sin(3 * uz + ph[2])
              + 0.4 * Math.sin(5 * ux + 2 * uy + ph[3]) * Math.sin(5 * uz - uy + ph[4]);
-    const Rr = R0 * (1 + 0.11 * nz);
+    const Rr = R0 * (1 + ROCCIA.irregolarita * nz);
     let d = clamp01(0.5 + (Rr - rr) / 2.2);
     const f = spec.dist(x, y, z);
     fd[i] = f;
-    d = Math.min(d, clamp01(0.5 + f * 0.9));
+    d = Math.min(d, clamp01(0.5 + f * 0.9));           // il reperto "scava" il suo spazio nella roccia
     if (x === 0 || y === 0 || z === 0 || x === N - 1 || y === N - 1 || z === N - 1) d = 0;
     density[i] = d;
-    const dirtDepth = 4.2 + 2.0 * Math.sin(ux * 4 + ph[5]) * Math.sin(uz * 4 + ph[6]);
-    mat[i] = f < SED_BAND ? SED : (rr > Rr - dirtDepth ? DIRT : ROCK);
-    if (f >= 0 && f < SHELL_BAND && d > ISO) shell.push(i);
+    const dirtDepth = params.terra + params.terra * 0.45 * Math.sin(ux * 4 + ph[5]) * Math.sin(uz * 4 + ph[6]);
+    mat[i] = f < params.sabbia ? SED : (rr > Rr - dirtDepth ? DIRT : ROCK);
+    if (f >= 0 && f < params.zona && d > ISO) shell.push(i);
   }
-  return { density, mat, fd, shell: Int32Array.from(shell), specimenMesh: specimenMesh(spec) };
+  return { density, mat, fd, shell: Int32Array.from(shell) };
 }
 
-// Mesh del reperto su una griglia a risoluzione doppia
-function specimenMesh(spec) {
+// Mesh di un reperto procedurale su una griglia a risoluzione doppia
+export function specimenMesh(spec) {
   const FR = 0.5, pad = 1.6, br = spec.boundR + pad;
   const mn = spec.center.map(c => c - br);
   const n = Math.ceil((2 * br) / FR) + 1;

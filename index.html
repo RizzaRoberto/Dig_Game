@@ -6,39 +6,61 @@
 <title>Scavo in 3D</title>
 <link rel="stylesheet" href="./src/style.css">
 </head>
-<body>
-<div id="hud" class="panel">
-  <h1>Scavo in 3D</h1>
-  <div class="row"><span>Strumento</span><b id="toolName">Trapano</b></div>
-  <div class="row"><span>Integrità reperto</span><span id="integV">100%</span></div>
-  <div class="bar" id="integ"><i></i></div>
-  <div class="row"><span>Reperto scoperto</span><span id="expoV">0%</span></div>
-  <div class="bar" id="expo"><i></i></div>
-  <div class="row"><span>Tempo</span><span id="timeV">0:00</span></div>
-  <div class="row"><span>Sotto lo strumento</span><span id="layerV">–</span></div>
-</div>
-<div id="topRight">
-  <button id="museumBtn">Museo</button>
-  <button id="arBtn">Entra in AR</button>
-</div>
-<div id="note" class="panel"></div>
+<body data-screen="start">
+
+<!-- ============ SCHERMATA INIZIALE ============ -->
+<section id="screen-start" class="screen">
+  <div class="title-block">
+    <p class="kicker">Archeologia in realtà mista</p>
+    <h1>Scavo in 3D</h1>
+    <p class="sub">Libera il reperto dalla roccia, strato dopo strato, senza romperlo.</p>
+    <button id="playBtn" class="big">Gioca</button>
+  </div>
+</section>
+
+<!-- ============ SCELTA DEL LIVELLO ============ -->
+<section id="screen-levels" class="screen">
+  <div class="levels-wrap">
+    <header><button id="levelsBack" class="ghost">← Indietro</button><h2>Scegli il livello</h2></header>
+    <div id="levelList"></div>
+  </div>
+</section>
+
+<!-- ============ INTERFACCIA DI GIOCO ============ -->
+<section id="screen-game" class="screen">
+  <div id="hud" class="panel">
+    <h1 id="levelName">Livello</h1>
+    <div class="row"><span>Strumento</span><b id="toolName">Trapano</b></div>
+    <div class="row"><span>Integrità reperto</span><span id="integV">100%</span></div>
+    <div class="bar" id="integ"><i></i></div>
+    <div class="row"><span>Reperto scoperto</span><span id="expoV">0%</span></div>
+    <div class="bar" id="expo"><i></i></div>
+    <div class="row"><span>Tempo</span><span id="timeV">0:00</span></div>
+    <div class="row"><span>Sotto lo strumento</span><span id="layerV">–</span></div>
+  </div>
+  <div id="topRight">
+    <button id="menuBtn">Livelli</button>
+    <button id="arBtn" class="accent">Entra in AR</button>
+  </div>
+  <div id="help" class="panel">Clic sinistro: scava · Tasto destro (o Shift+trascina): ruota · Rotellina: zoom · 1-3 strumenti · S scanner · R ricomincia · D debug</div>
+  <div id="toolbar" class="panel">
+    <button id="scanBtn">Scanner<small>vedi dentro · S</small></button>
+  </div>
+  <div id="msg" class="panel">
+    <h2 id="msgT"></h2>
+    <div class="stars" id="msgS"></div>
+    <span class="badge" id="msgB"></span>
+    <p id="msgP"></p>
+    <div class="btns">
+      <button id="retryBtn">Riprova</button>
+      <button id="levelsBtn">Livelli</button>
+      <button id="nextBtn" class="accent">Prossimo livello</button>
+    </div>
+  </div>
+</section>
+
 <div id="loading" class="panel">Preparo la roccia…</div>
-<div id="help" class="panel">Clic sinistro: scava · Tasto destro (o Shift+trascina): ruota · Rotellina: zoom · 1-3 strumenti · S scanner · R nuovo scavo</div>
-<div id="toolbar" class="panel">
-  <button id="scanBtn">Scanner<small>vedi dentro · S</small></button>
-</div>
-<div id="msg" class="panel">
-  <h2 id="msgT"></h2>
-  <div class="stars" id="msgS"></div>
-  <span class="badge" id="msgB"></span>
-  <p id="msgP"></p>
-  <button id="again">Nuovo scavo</button>
-</div>
-<div id="museum" class="panel">
-  <h2>Il tuo museo</h2>
-  <div id="museumList"></div>
-  <button id="museumClose">Chiudi</button>
-</div>
+<div id="note" class="panel"></div>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

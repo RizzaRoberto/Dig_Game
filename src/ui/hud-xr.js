@@ -1,6 +1,6 @@
 // Pannello informativo sul controller sinistro (nel visore)
 import * as THREE from 'three';
-import { TOOLS, WIN_EXPOSURE } from '../config.js';
+import { TOOLS } from '../config.js';
 
 export class XRHud extends THREE.Mesh {
   constructor() {
@@ -35,16 +35,16 @@ export class XRHud extends THREE.Mesh {
         c.fillStyle = 'rgba(255,255,255,.1)'; c.fillRect(26, y + 10, 460, 14); c.fillStyle = col; c.fillRect(26, y + 10, 460 * v, 14);
       };
       bar(100, 'Integrità', G.integrity / 100, G.integrity > 50 ? '#7cc576' : '#e0573f');
-      bar(154, 'Scoperto', Math.min(1, G.exposure / WIN_EXPOSURE), '#e8a94a');
+      bar(154, 'Scoperto', Math.min(1, G.exposure / G.winAt), '#e8a94a');
       if (G.state === 'play') {
         c.fillStyle = '#b9a88e'; c.font = '20px system-ui,sans-serif';
         c.fillText('Grilletto sx: strumento · Impugnatura dx: scanner', 26, 222);
-        c.fillText('Impugnatura sx: sposta · X: riposiziona', 26, 252);
+        c.fillText('Impugnatura sx: sposta · X: riposiziona · Y: esci', 26, 252);
       } else {
         c.fillStyle = G.state === 'won' ? '#7cc576' : '#e0573f'; c.font = 'bold 25px system-ui,sans-serif';
         c.fillText(G.state === 'won' ? `${G.specimenName} estratto! ${'★'.repeat(G.stars)}${'☆'.repeat(3 - G.stars)}` : 'Reperto distrutto', 26, 222);
         c.fillStyle = '#f3e7d3'; c.font = '21px system-ui,sans-serif';
-        c.fillText(G.banner || 'Grilletto sinistro: nuovo scavo', 26, 254);
+        c.fillText(G.banner || 'Grilletto sx: riprova · Y: esci dall\'AR', 26, 254);
       }
     }
     this.tex.needsUpdate = true;

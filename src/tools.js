@@ -1,10 +1,14 @@
-// Modelli 3D degli strumenti (tenuti dal controller destro) e cursore
+// Modelli 3D degli strumenti e cursore.
+// Ogni strumento usa il tuo modello .glb se in config.js ha "modello", altrimenti una forma semplice fatta di cilindri.
+// Convenzione: lo strumento punta verso -Z e la sua punta sta a TIP metri dall'origine (dove c'è il controller).
 import * as THREE from 'three';
 import { TOOLS, CELL } from './config.js';
+import { loadModel } from './specimen-model.js';
 
 export const TIP = 0.075; // distanza punta-controller in metri
 
-function makeToolModel(id) {
+// Forma semplice di riserva (cilindri e parallelepipedi)
+function makeBasicModel(id) {
   const g = new THREE.Group();
   const metal = new THREE.MeshStandardMaterial({ color: 0xb8bcc2, metalness: 0.8, roughness: 0.3 });
   const body = new THREE.MeshStandardMaterial({ color: id === 'drill' ? 0xe8a94a : 0x6b4a2e, roughness: 0.6 });
@@ -15,11 +19,69 @@ function makeToolModel(id) {
   return g;
 }
 
+// Tutti i vertici del modello in coordinate del modello
+function forEachVertex(root, fn) {
+  root.updateMatrixWorld(true);
+  const v = new THREE.Vector3();
+  root.traverse(o => {
+    const pa = o.isMesh && o.geometry.attributes.position; if (!pa) return;
+    for (let i = 0; i < pa.count; i++) fn(v.fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld));
+  });
+}
+
+const AXES = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
+
+// Da che parte è la punta? Con 'auto': l'estremità più sottile lungo l'asse più lungo.
+function findTipDirection(root, box, punta) {
+  if (punta && punta !== 'auto') {
+    const neg = punta.startsWith('-'), a = AXES[punta.replace('-', '')];
+    if (a) return new THREE.Vector3(...a).multiplyScalar(neg ? -1 : 1);
+  }
+  const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+  const k = size.x >= size.y && size.x >= size.z ? 'x' : size.y >= size.z ? 'y' : 'z';
+  const others = ['x', 'y', 'z'].filter(a => a !== k), len = size[k];
+  let wMin = 0, wMax = 0; // larghezza vicino alle due estremità
+  forEachVertex(root, p => {
+    const t = (p[k] - box.min[k]) / len;
+    const w = Math.hypot(p[others[0]] - ctr[others[0]], p[others[1]] - ctr[others[1]]);
+    if (t < 0.15) wMin = Math.max(wMin, w);
+    if (t > 0.85) wMax = Math.max(wMax, w);
+  });
+  return new THREE.Vector3(...AXES[k]).multiplyScalar(wMax <= wMin ? 1 : -1);
+}
+
+// Allinea il modello: punta verso -Z a distanza TIP, lunghezza = t.lunghezza cm
+function fitToolModel(scene, t) {
+  const model = scene.clone(true);
+  model.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  model.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model);
+  const dir = findTipDirection(model, box, t.punta);
+  const size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+  const length = Math.abs(dir.dot(size)) || 1;
+  const tipPoint = ctr.clone().addScaledVector(dir, length / 2);
+
+  const offset = new THREE.Group(); offset.position.copy(tipPoint).negate(); offset.add(model);
+  const orient = new THREE.Group(); orient.add(offset);
+  orient.quaternion.setFromUnitVectors(dir, new THREE.Vector3(0, 0, -1));
+  orient.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), THREE.MathUtils.degToRad(t.rotazione || 0)));
+  orient.scale.setScalar(((t.lunghezza || 12) / 100) / length);
+  const holder = new THREE.Group(); holder.position.z = -TIP; holder.add(orient);
+  return holder;
+}
+
 export class ToolRig extends THREE.Group {
   constructor() {
     super();
-    this.models = TOOLS.map((t, i) => { const m = makeToolModel(t.id); m.visible = i === 0; this.add(m); return m; });
+    this.models = TOOLS.map((t, i) => { const m = new THREE.Group(); m.add(makeBasicModel(t.id)); m.visible = i === 0; this.add(m); return m; });
     this.tip = new THREE.Object3D(); this.tip.position.z = -TIP; this.add(this.tip);
+    // carica i modelli .glb indicati in config.js (se il caricamento fallisce resta la forma semplice)
+    TOOLS.forEach((t, i) => {
+      if (!t.modello) return;
+      loadModel(t.modello)
+        .then(gltf => { this.models[i].clear(); this.models[i].add(fitToolModel(gltf.scene, t)); })
+        .catch(e => console.warn(`Strumento "${t.name}": ${e.message}. Uso la forma semplice.`));
+    });
   }
   setTool(i) { this.models.forEach((m, k) => (m.visible = k === i)); }
 }

@@ -18,6 +18,10 @@ export class UI {
     $('#retryBtn').onclick = h.retry; $('#nextBtn').onclick = h.next;
     $('#scanBtn').onclick = h.scan;
     $('#arBtn').onclick = h.enterAR;
+    // spunta "Mostra strumento" (solo su PC), ricordata nel browser
+    const cb = $('#showTool');
+    try { cb.checked = localStorage.getItem('scavo3d.mostraStrumento') !== '0'; } catch (e) { /* storage non disponibile */ }
+    cb.onchange = () => { try { localStorage.setItem('scavo3d.mostraStrumento', cb.checked ? '1' : '0'); } catch (e) { /* ignorato */ } cb.blur(); };
     TOOLS.forEach((t, i) => {
       const b = document.createElement('button'); b.dataset.t = i;
       b.innerHTML = `${t.name}<small>${t.hint} · ${i + 1}</small>`;
@@ -26,6 +30,7 @@ export class UI {
   }
 
   get screen() { return document.body.dataset.screen; }
+  get showTool() { return $('#showTool').checked; }
   show(name) {
     document.body.dataset.screen = name;
     if (name === 'levels') this.renderLevels();

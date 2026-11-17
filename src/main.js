@@ -10,7 +10,7 @@ import { createScene, applyLights, followTarget } from './scene.js';
 import { Rock } from './voxel/rock.js';
 import { Debris } from './fx/debris.js';
 import { initAudio, toolSound, blip } from './fx/audio.js';
-import { ToolRig, Cursor } from './tools.js';
+import { ToolRig, Cursor, TIP } from './tools.js';
 import { XRInput } from './xr/xr.js';
 import { XRHud } from './ui/hud-xr.js';
 import { UI, fmtTime } from './ui/screens.js';
@@ -33,7 +33,7 @@ const CAM0 = camera.position.clone();
 const rock = new Rock(); scene.add(rock);
 const debris = new Debris(); scene.add(debris);
 const cursor = new Cursor(); scene.add(cursor);
-const toolRig = new ToolRig();
+const toolRig = new ToolRig(); scene.add(toolRig); // su PC segue il mouse, nel visore passa al controller destro
 const xrHud = new XRHud();
 const reticle = new THREE.Mesh(new THREE.RingGeometry(0.11, 0.125, 48).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xe8a94a, transparent: true, opacity: 0.8 }));
 reticle.visible = false; reticle.matrixAutoUpdate = false; scene.add(reticle);
@@ -173,12 +173,12 @@ renderer.xr.addEventListener('sessionstart', () => { scene.background = null; G.
 renderer.xr.addEventListener('sessionend', () => {
   scene.background = new THREE.Color(); applyLights(renderer, scene, lights);
   G.placing = false; grab = null; G.rightActive = false; reticle.visible = false;
-  rock.position.set(0, 0, 0); rock.quaternion.identity();
+  rock.position.set(0, 0, 0); rock.quaternion.identity(); scene.add(toolRig);
   camera.position.copy(CAM0); controls.target.set(0, 0, 0);
 });
 
 const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(), tmpM = new THREE.Matrix4();
-const UP = new THREE.Vector3(0, 1, 0);
+const UP = new THREE.Vector3(0, 1, 0), RIGHT = new THREE.Vector3(1, 0, 0);
 function updatePlacement() {
   const hand = xr.hands.right ? 'right' : 'left', c = xr.hands[hand];
   const hit = xr.hits[hand];
@@ -218,8 +218,9 @@ renderer.setAnimationLoop((time, frame) => {
   const T = TOOLS[G.tool], playing = G.state === 'play' && !G.placing;
   let tipLocal = null, using = false;
   cursor.visible = false;
+  toolRig.visible = inXR || false;
   if (inXR) {
-    if (toolRig.parent && playing) {
+    if (toolRig.parent !== scene && playing) {
       toolRig.tip.getWorldPosition(tmpV);
       cursor.position.copy(tmpV); cursor.visible = true;
       tipLocal = rock.worldToLocal(tmpV.clone());
@@ -232,6 +233,13 @@ renderer.setAnimationLoop((time, frame) => {
       cursor.position.copy(hits[0].point); cursor.visible = true;
       tipLocal = rock.worldToLocal(hits[0].point.clone().addScaledVector(ray.ray.direction, CELL * 0.5));
       using = pointerDown;
+      // su PC lo strumento arriva in diagonale dall'alto a destra, con la punta sul punto colpito
+      tmpV2.copy(ray.ray.direction).multiplyScalar(0.15)
+        .addScaledVector(UP.clone().applyQuaternion(camera.quaternion), -0.07)
+        .addScaledVector(RIGHT.clone().applyQuaternion(camera.quaternion), -0.07).normalize();
+      toolRig.position.copy(hits[0].point).addScaledVector(tmpV2, -TIP);
+      toolRig.lookAt(tmpV.copy(toolRig.position).sub(tmpV2));
+      toolRig.visible = ui.showTool;
     }
   }
 

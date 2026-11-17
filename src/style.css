@@ -49,6 +49,8 @@ button.big:hover { filter:brightness(1.08); }
 #hud { top:12px; left:12px; padding:12px 14px; width:250px; }
 #hud h1 { margin:0 0 8px; font-size:15px; letter-spacing:.04em; text-transform:uppercase; color:var(--acc); }
 .row { display:flex; justify-content:space-between; font-size:12px; color:var(--dim); margin-top:8px; }
+.row.check { align-items:center; cursor:pointer; padding-top:6px; border-top:1px solid var(--line); }
+.row.check input { accent-color:var(--acc); width:15px; height:15px; margin:0; cursor:pointer; }
 .bar { height:8px; border-radius:4px; background:rgba(255,255,255,.08); overflow:hidden; margin-top:3px; }
 .bar > i { display:block; height:100%; width:100%; border-radius:4px; transition:width .15s; }
 #integ > i { background:linear-gradient(90deg,var(--bad),var(--acc) 50%,var(--good)); }

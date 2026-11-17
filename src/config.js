@@ -42,8 +42,17 @@ export const LIVELLO_DEFAULT = {
 // rates = velocità con cui toglie materiale per strato {1: terra, 2: roccia, 3: sabbia} (0 = non lo intacca)
 // dmg = danno al secondo al reperto quando la punta è troppo vicina
 // hapt = intensità della vibrazione · snd = [frequenza, volume, risonanza] del suono
+//
+// MODELLO 3D DELLO STRUMENTO (facoltativo): senza "modello" si usa la forma semplice costruita nel codice.
+// modello   = file .glb in src/modelli/strumenti/   es. modello: 'strumenti/trapano.glb'
+// lunghezza = lunghezza dello strumento nel gioco, in cm (predefinito 12)
+// punta     = da che parte del modello sta la punta: 'auto' (l'estremità più sottile) oppure
+//             'x', '-x', 'y', '-y', 'z', '-z' (assi del file .glb; in Blender "verso l'alto" = 'y')
+// rotazione = gradi di rotazione attorno all'asse dello strumento (per girare l'impugnatura)
 export const TOOLS = [
-  { id: 'drill',  name: 'Trapano',   hint: 'veloce, rischioso',   r: 3.2, rates: { 1: 9,   2: 3.2, 3: 9   }, dmg: 40, hapt: 0.8,  snd: [650, 0.22, 3] },
+  { id: 'drill',  name: 'Trapano',   hint: 'veloce, rischioso',   r: 3.2, rates: { 1: 9,   2: 3.2, 3: 9   }, dmg: 40, hapt: 0.8,  snd: [650, 0.22, 3],
+    modello: 'strumenti/drill.glb', lunghezza: 12, punta: 'auto', rotazione: 0,
+  },
   { id: 'chisel', name: 'Scalpello', hint: 'preciso',             r: 1.8, rates: { 1: 6,   2: 2.2, 3: 5   }, dmg: 16, hapt: 0.45, snd: [2300, 0.12, 6] },
   { id: 'brush',  name: 'Pennello',  hint: 'solo terra e sabbia', r: 3.8, rates: { 1: 4.5, 2: 0,   3: 4.5 }, dmg: 0,  hapt: 0.12, snd: [4800, 0.06, 0.7] },
 ];

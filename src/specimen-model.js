@@ -7,8 +7,8 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { C, CELL, HALF } from './config.js';
 
-// Tutti i file in src/modelli/ vengono trovati automaticamente da Vite
-const FILES = import.meta.glob('./modelli/*.glb', { eager: true, query: '?url', import: 'default' });
+// Tutti i file in src/modelli/ (e sottocartelle, come strumenti/) vengono trovati automaticamente da Vite
+const FILES = import.meta.glob('./modelli/**/*.glb', { eager: true, query: '?url', import: 'default' });
 
 const loader = new GLTFLoader();
 const draco = new DRACOLoader(); // i decoder sono inclusi nel progetto

@@ -43,8 +43,8 @@ export const LIVELLO_DEFAULT = {
 // dmg = danno al secondo al reperto quando la punta è troppo vicina
 // hapt = intensità della vibrazione · snd = [frequenza, volume, risonanza] del suono
 export const TOOLS = [
-  { id: 'drill',  name: 'Trapano',   hint: 'veloce, rischioso',   r: 3.2, rates: { 1: 9,   2: 3.2, 3: 9   }, dmg: 40, hapt: 0.8,  snd: [650, 0.22, 3] },
-  { id: 'chisel', name: 'Scalpello', hint: 'preciso',             r: 1.8, rates: { 1: 6,   2: 2.2, 3: 5   }, dmg: 16, hapt: 0.45, snd: [2300, 0.12, 6] },
+  { id: 'drill',  name: 'Trapano',   hint: 'veloce, rischioso',   r: 3.2, rates: { 1: 9,   2: 4.5, 3: 2   }, dmg: 37, hapt: 0.8,  snd: [650, 0.22, 3] },
+  { id: 'chisel', name: 'Scalpello', hint: 'preciso',             r: 1.8, rates: { 1: 6,   2: 2.2, 3: 5   }, dmg: 13, hapt: 0.45, snd: [2300, 0.12, 6] },
   { id: 'brush',  name: 'Pennello',  hint: 'solo terra e sabbia', r: 3.8, rates: { 1: 4.5, 2: 0,   3: 4.5 }, dmg: 0,  hapt: 0.12, snd: [4800, 0.06, 0.7] },
 ];
 export const GIOCO = {

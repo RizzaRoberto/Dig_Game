@@ -97,3 +97,4 @@ body.mobile .pc-only { display:none; }
   #msg { left:10px; right:10px; transform:none; max-width:none; top:auto; bottom:64px; }
 }
 @media (max-height:480px) { #legend { display:none; } }
+@media (max-width:640px) { body.embedded #leftCol { display:none; } }

@@ -115,7 +115,7 @@ function finish(won) {
     blip('win');
   } else {
     G.banner = '';
-    ui.showResult({ won, text: 'Troppo vicino col trapano! Vicino al reperto usa scalpello e pennello.' });
+    ui.showResult({ won, text: 'Troppo vicino col trapano! Vicino al reperto usa il pennello.' });
     debris.spawn(rock.specPivot.getWorldPosition(new THREE.Vector3()), new THREE.Color(level.coloreDetriti), 140, 0.6);
     rock.specPivot.visible = false;
     blip('lose');

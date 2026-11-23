@@ -6,7 +6,7 @@
 <title>Scavo in 3D</title>
 <link rel="stylesheet" href="./src/style.css">
 </head>
-<body data-screen="start">
+<body data-screen="">
 
 <!-- ============ SCHERMATA INIZIALE ============ -->
 <section id="screen-start" class="screen">
@@ -65,6 +65,7 @@
 
 <div id="loading" class="panel">Preparo la roccia…</div>
 <div id="note" class="panel"></div>
+<script>if(new URLSearchParams(location.search).has("embed"))document.body.classList.add("embedded");</script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -16,7 +16,7 @@ const COMANDI_PC = [
   ['Tasto destro', 'ruota'],
   ['Shift + trascina', 'ruota'],
   ['Rotellina', 'zoom'],
-  ['1 2 3', 'strumenti'],
+  [TOOLS.map((_, i) => i + 1).join(' '), 'strumenti'],
   ['S', 'scanner'],
   ['R', 'ricomincia'],
   ['D', 'pannello di debug'],
